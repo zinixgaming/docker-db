@@ -1,5 +1,5 @@
 # ------------------
-## 24GB RAM + 8 vCPU
+## 8GB RAM + 2 vCPU
 # ------------------
 
 services:
@@ -19,8 +19,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2.0"
-          memory: 4G
+          cpus: "0.5"
+          memory: 2G
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -58,8 +58,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "4.0"
-          memory: 16G
+          cpus: "1.0"
+          memory: 4G
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -92,8 +92,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2.0"
-          memory: 4G
+          cpus: "0.5"
+          memory: 2G
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]

@@ -19,8 +19,8 @@ A production-ready Docker Compose setup for PostgreSQL, Redis, and RabbitMQ with
 - Docker Engine 20.10+
 - Docker Compose 2.0+
 - Make utility
-- 24GB+ RAM recommended (configurable)
-- 8+ vCPU recommended (configurable)
+- 8GB+ RAM recommended (configurable)
+- 2+ vCPU recommended (configurable)
 
 ## 🛠 Quick Start
 
@@ -76,18 +76,18 @@ make health
 ### PostgreSQL 17
 - **Port**: 5432
 - **Database**: zinixgames
-- **Memory**: 16GB limit
-- **CPU**: 4 cores limit
+- **Memory**: 4GB limit
+- **CPU**: 1 core limit
 - **Features**: 
-  - Optimized for 16GB RAM allocation
+  - Optimized for 4GB RAM allocation
   - WAL replication enabled
-  - Performance tuning for high concurrency
+  - Performance tuning for moderate concurrency
   - Custom timezone (Asia/Kolkata)
 
 ### Redis 7
 - **Port**: 6379
-- **Memory**: 4GB limit with LRU eviction
-- **CPU**: 2 cores limit
+- **Memory**: 2GB limit with LRU eviction
+- **CPU**: 0.5 cores limit
 - **Features**:
   - AOF persistence with everysec sync
   - Daily RDB snapshots
@@ -97,8 +97,8 @@ make health
 ### RabbitMQ 4
 - **AMQP Port**: 5672
 - **Management UI**: 15672
-- **Memory**: 4GB limit
-- **CPU**: 2 cores limit
+- **Memory**: 2GB limit
+- **CPU**: 0.5 cores limit
 - **Features**:
   - Management plugin enabled
   - Health checks configured
@@ -192,27 +192,27 @@ docker-db/
 ## ⚙️ Configuration Details
 
 ### PostgreSQL Configuration
-- **Shared Buffers**: 1536MB (optimized for 16GB allocation)
-- **Work Memory**: 16MB per operation
-- **Maintenance Work Memory**: 512MB
-- **Effective Cache Size**: 4096MB
-- **Max Connections**: 200
+- **Shared Buffers**: 512MB (optimized for 4GB allocation)
+- **Work Memory**: 8MB per operation
+- **Maintenance Work Memory**: 128MB
+- **Effective Cache Size**: 1GB
+- **Max Connections**: 100
 - **WAL Level**: Replica (for replication support)
 - **Checkpoint Target**: 0.9 (performance optimization)
 
 ### Redis Configuration
-- **Max Memory**: 6GB with LRU eviction policy
+- **Max Memory**: 2GB with LRU eviction policy
 - **Persistence**: AOF + RDB combination
 - **AOF Sync**: Every second (balance of performance/durability)
 - **RDB Snapshots**: Daily (86400 seconds, 1 change)
 - **Security**: Dangerous commands renamed/disabled
-- **Performance**: 4 IO threads enabled
+- **Performance**: 2 IO threads enabled
 
 ### RabbitMQ Configuration
 - **Default Virtual Host**: /
 - **Management Plugin**: Enabled
 - **Health Checks**: 30s interval with 3 retries
-- **Resource Limits**: 4GB RAM, 2 CPU cores
+- **Resource Limits**: 2GB RAM, 0.5 CPU cores
 
 ## 🔒 Security Features
 
@@ -226,8 +226,8 @@ docker-db/
 ## 📈 Resource Allocation
 
 **Total System Requirements:**
-- **RAM**: 24GB (16GB PostgreSQL + 4GB Redis + 4GB RabbitMQ)
-- **CPU**: 8 cores (4 PostgreSQL + 2 Redis + 2 RabbitMQ)
+- **RAM**: 8GB (4GB PostgreSQL + 2GB Redis + 2GB RabbitMQ)
+- **CPU**: 2 cores (1 PostgreSQL + 0.5 Redis + 0.5 RabbitMQ)
 - **Storage**: Depends on data size (persistent volumes)
 
 **Network:**
@@ -255,6 +255,7 @@ docker-db/
 - Adjust resource limits in `docker.yaml`
 - Modify configuration files in `conf/` directory
 - Update memory settings in PostgreSQL and Redis configs accordingly
+- Current configuration optimized for 8GB RAM / 2 vCPU systems
 
 ## 🐛 Troubleshooting
 
