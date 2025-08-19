@@ -31,7 +31,7 @@ SERVICE_PORTS := $(POSTGRES_PORT) $(REDIS_PORT) $(RABBITMQ_PORT) $(RABBITMQ_MANA
 help: ## - Show help message
 	@echo "$(CYAN)Docker Management - Available Commands$(NC)"
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make $(CYAN)<target>$(NC)\n"} \
-	/^[a-zA-Z_-]+:.*##/ { printf "  $(CYAN)%-14s$(NC) %s\n", $$1, $$2 } \
+	/^[a-zA-Z_-]+:.*##/ { printf "  $(CYAN)%-18s$(NC) %s\n", $$1, $$2 } \
 	/^##@/ { printf "\n$(GREEN)%s$(NC)\n", substr($$0, 5) }' $(MAKEFILE_LIST)
 
 ##@ Setup/Commands
@@ -251,6 +251,40 @@ ufw-disable: ufw-check ## - Disable UFW
 	@sudo ufw --force disable
 	@echo "$(GREEN)✓$(NC) UFW disabled"
 
+ufw-reset: ufw-check ## - Reset all UFW rules (⚠️ removes all rules)
+	@echo "$(RED)[WARNING]$(NC) This will remove all UFW rules!"
+	@echo "$(RED)[WARNING]$(NC) Press Ctrl+C to cancel, or Enter to continue..."
+	@read dummy
+	@echo "$(GREEN)[INFO]$(NC) Resetting UFW rules..."
+	@sudo ufw --force reset
+	@echo "$(GREEN)✓$(NC) UFW rules reset"
+
+ufw-backup: ufw-check ## - Backup current UFW rules
+	@mkdir -p ./stores/ufw
+	@BACKUP_FILE="./stores/ufw/ufw-backup-$$(date +%Y%m%d-%H%M%S).txt"; \
+	echo "$(GREEN)[INFO]$(NC) Backing up UFW rules to $$BACKUP_FILE..."; \
+	sudo ufw status numbered > $$BACKUP_FILE; \
+	echo "$(GREEN)✓$(NC) UFW rules backed up to $$BACKUP_FILE"; \
+	echo "$(YELLOW)[INFO]$(NC) Use 'make ufw-list-backups' to see all backups"
+
+ufw-restore: ufw-check ## - Restore UFW rules from backup
+	@if [ -z "$(FILE)" ]; then \
+		echo "$(RED)[ERROR]$(NC) Backup file required!"; \
+		echo "$(YELLOW)[INFO]$(NC) Usage: make ufw-restore FILE=ufw-backup-20250819-123456.txt"; \
+		echo "$(YELLOW)[INFO]$(NC) Use 'make ufw-list-backups' to see available backups"; \
+		exit 1; \
+	fi
+	@if [ ! -f "./stores/ufw/$(FILE)" ]; then \
+		echo "$(RED)[ERROR]$(NC) Backup file './stores/ufw/$(FILE)' not found!"; \
+		echo "$(YELLOW)[INFO]$(NC) Use 'make ufw-list-backups' to see available backups"; \
+		exit 1; \
+	fi
+	@echo "$(BLUE)[INFO]$(NC) Backup file contents:"
+	@cat "./stores/ufw/$(FILE)"
+	@echo ""
+	@echo "$(YELLOW)[INFO]$(NC) To restore, manually add rules using the backup as reference"
+	@echo "$(YELLOW)[INFO]$(NC) Example: sudo ufw allow from 192.168.1.100 to any port 5432"
+
 ufw-allow: ufw-check ## - Allow <IP> to specific <PORT> (must be a project port)
 	@if [ -z "$(PORT)" ] || [ -z "$(IP)" ]; then \
 		echo "$(RED)[ERROR]$(NC) Port and IP required!"; \
@@ -303,80 +337,29 @@ ufw-allow-ip: ufw-check ## - Allow <IP> to all service ports
 	done
 	@echo "$(GREEN)✓$(NC) IP $(IP) can now access all service ports"
 
-ufw-test-ip: ufw-check ## - Test if <IP> can connect to service ports.
+ufw-test-ip: ufw-check
 	@if [ -z "$(IP)" ]; then \
 		echo "$(RED)[ERROR]$(NC) IP address required!"; \
 		echo "$(YELLOW)[INFO]$(NC) Usage: make ufw-test-ip IP=203.0.113.45"; \
 		exit 1; \
 	fi
 	@echo "$(GREEN)[INFO]$(NC) Testing connection access for IP: $(IP)"
-	@echo "$(BLUE)[INFO]$(NC) Checking UFW rules for service ports..."
-	@echo ""
-	@echo "$(YELLOW)=== PostgreSQL Port $(POSTGRES_PORT) ===$(NC)"
-	@if sudo ufw status | grep -q "$(POSTGRES_PORT)/tcp.*ALLOW.*$(IP)" || sudo ufw status | grep -q "$(POSTGRES_PORT)/tcp.*ALLOW.*Anywhere"; then \
-		echo "$(GREEN)✓$(NC) IP $(IP) can connect to PostgreSQL"; \
-	else \
-		echo "$(RED)✗$(NC) IP $(IP) cannot connect to PostgreSQL"; \
-	fi
-	@echo ""
-	@echo "$(YELLOW)=== Redis Port $(REDIS_PORT) ===$(NC)"
-	@if sudo ufw status | grep -q "$(REDIS_PORT)/tcp.*ALLOW.*$(IP)" || sudo ufw status | grep -q "$(REDIS_PORT)/tcp.*ALLOW.*Anywhere"; then \
-		echo "$(GREEN)✓$(NC) IP $(IP) can connect to Redis"; \
-	else \
-		echo "$(RED)✗$(NC) IP $(IP) cannot connect to Redis"; \
-	fi
-	@echo ""
-	@echo "$(YELLOW)=== RabbitMQ Port $(RABBITMQ_PORT) ===$(NC)"
-	@if sudo ufw status | grep -q "$(RABBITMQ_PORT)/tcp.*ALLOW.*$(IP)" || sudo ufw status | grep -q "$(RABBITMQ_PORT)/tcp.*ALLOW.*Anywhere"; then \
-		echo "$(GREEN)✓$(NC) IP $(IP) can connect to RabbitMQ"; \
-	else \
-		echo "$(RED)✗$(NC) IP $(IP) cannot connect to RabbitMQ"; \
-	fi
-	@echo ""
-	@echo "$(YELLOW)=== RabbitMQ Management Port $(RABBITMQ_MANAGEMENT_PORT) ===$(NC)"
-	@if sudo ufw status | grep -q "$(RABBITMQ_MANAGEMENT_PORT)/tcp.*ALLOW.*$(IP)" || sudo ufw status | grep -q "$(RABBITMQ_MANAGEMENT_PORT)/tcp.*ALLOW.*Anywhere"; then \
-		echo "$(GREEN)✓$(NC) IP $(IP) can connect to RabbitMQ Management"; \
-	else \
-		echo "$(RED)✗$(NC) IP $(IP) cannot connect to RabbitMQ Management"; \
-	fi
-	@echo ""
-	@echo "$(BLUE)[INFO]$(NC) Connection test completed for IP: $(IP)"
+	@for port in $(SERVICE_PORTS); do \
+		echo ""; \
+		echo "$(YELLOW)=== Testing Port $$port ===$(NC)"; \
+		if sudo ufw status | grep -E "$$port/tcp.*ALLOW" | grep -Eq "$(IP)|Anywhere"; then \
+			echo "$(GREEN)✓$(NC) UFW allows $(IP) on port $$port"; \
+		else \
+			echo "$(RED)✗$(NC) UFW blocks $(IP) on port $$port"; \
+		fi; \
+		nc -zv -w2 127.0.0.1 $$port >/dev/null 2>&1 && \
+			echo "$(GREEN)✓$(NC) Port $$port is reachable locally" || \
+			echo "$(RED)✗$(NC) Port $$port is not reachable locally"; \
+	done
+	@echo ""; \
+	echo "$(BLUE)[INFO]$(NC) Connection test completed for IP: $(IP)"
 
-ufw-reset: ufw-check ## - Reset all UFW rules (⚠️ removes all rules)
-	@echo "$(RED)[WARNING]$(NC) This will remove all UFW rules!"
-	@echo "$(RED)[WARNING]$(NC) Press Ctrl+C to cancel, or Enter to continue..."
-	@read dummy
-	@echo "$(GREEN)[INFO]$(NC) Resetting UFW rules..."
-	@sudo ufw --force reset
-	@echo "$(GREEN)✓$(NC) UFW rules reset"
-
-ufw-backup: ufw-check ## - Backup current UFW rules
-	@mkdir -p ./stores/ufw
-	@BACKUP_FILE="./stores/ufw/ufw-backup-$$(date +%Y%m%d-%H%M%S).txt"; \
-	echo "$(GREEN)[INFO]$(NC) Backing up UFW rules to $$BACKUP_FILE..."; \
-	sudo ufw status numbered > $$BACKUP_FILE; \
-	echo "$(GREEN)✓$(NC) UFW rules backed up to $$BACKUP_FILE"; \
-	echo "$(YELLOW)[INFO]$(NC) Use 'make ufw-list-backups' to see all backups"
-
-ufw-restore: ufw-check ## - Restore UFW rules from backup
-	@if [ -z "$(FILE)" ]; then \
-		echo "$(RED)[ERROR]$(NC) Backup file required!"; \
-		echo "$(YELLOW)[INFO]$(NC) Usage: make ufw-restore FILE=ufw-backup-20250819-123456.txt"; \
-		echo "$(YELLOW)[INFO]$(NC) Use 'make ufw-list-backups' to see available backups"; \
-		exit 1; \
-	fi
-	@if [ ! -f "./stores/ufw/$(FILE)" ]; then \
-		echo "$(RED)[ERROR]$(NC) Backup file './stores/ufw/$(FILE)' not found!"; \
-		echo "$(YELLOW)[INFO]$(NC) Use 'make ufw-list-backups' to see available backups"; \
-		exit 1; \
-	fi
-	@echo "$(BLUE)[INFO]$(NC) Backup file contents:"
-	@cat "./stores/ufw/$(FILE)"
-	@echo ""
-	@echo "$(YELLOW)[INFO]$(NC) To restore, manually add rules using the backup as reference"
-	@echo "$(YELLOW)[INFO]$(NC) Example: sudo ufw allow from 192.168.1.100 to any port 5432"
-
-ufw-list-backups: ## - List all UFW backup files
+ufw-list-backups: ufw-check ## - List all UFW backup files
 	@echo "$(GREEN)[INFO]$(NC) Available UFW backup files:"
 	@if [ -d "./stores/ufw" ] && [ "$$(ls -A ./stores/ufw 2>/dev/null)" ]; then \
 		ls -la ./stores/ufw/; \
@@ -384,7 +367,7 @@ ufw-list-backups: ## - List all UFW backup files
 		echo "$(YELLOW)[INFO]$(NC) No backup files found. Use 'make ufw-backup' to create one."; \
 	fi
 
-ufw-clean-backups: ## - Clean old UFW backup files (keeps last 5)
+ufw-clean-backups: ufw-check ## - Clean old UFW backup files (keeps last 5)
 	@echo "$(GREEN)[INFO]$(NC) Cleaning old UFW backup files (keeping last 5)..."
 	@if [ -d "./stores/ufw" ]; then \
 		cd ./stores/ufw && ls -t ufw-backup-*.txt 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true; \
@@ -393,3 +376,16 @@ ufw-clean-backups: ## - Clean old UFW backup files (keeps last 5)
 	else \
 		echo "$(YELLOW)[INFO]$(NC) No backup directory found"; \
 	fi
+ufw-allow-anywhere: ufw-check ## - Allow all database ports from anywhere
+	@for port in $(SERVICE_PORTS); do \
+		echo "$(GREEN)[INFO]$(NC) Allowing port $$port from anywhere..."; \
+		sudo ufw allow $$port/tcp comment "$(PROJECT_NAME) Service - Anywhere"; \
+	done
+	@echo "$(GREEN)✓$(NC) All service ports are now open to worldwide access"
+
+ufw-deny-anywhere: ufw-check ## - Deny all database ports from anywhere
+	@for port in $(SERVICE_PORTS); do \
+		echo "$(GREEN)[INFO]$(NC) Blocking port $$port from anywhere..."; \
+		sudo ufw delete allow $$port/tcp 2>/dev/null || true; \
+	done
+	@echo "$(GREEN)✓$(NC) All service ports are now blocked from worldwide access"
