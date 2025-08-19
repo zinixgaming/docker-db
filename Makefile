@@ -16,6 +16,10 @@ ENV_FILE := .env
 DATA_DIR := ./data
 PROJECT_NAME := zinixgames
 DOCKER_COMPOSE_FILE := ./docker.yaml
+# Service Ports
+SSH_PORT := 22
+SERVICE_PORTS := $(POSTGRES_PORT) $(REDIS_PORT) $(RABBITMQ_PORT) $(RABBITMQ_MANAGEMENT_PORT)
+
 
 # Load environment variables from .env if it exists
 ifneq (,$(wildcard $(ENV_FILE)))
@@ -30,7 +34,7 @@ help: ## - Show help message
 	/^[a-zA-Z_-]+:.*##/ { printf "  $(CYAN)%-14s$(NC) %s\n", $$1, $$2 } \
 	/^##@/ { printf "\n$(GREEN)%s$(NC)\n", substr($$0, 5) }' $(MAKEFILE_LIST)
 
-##@ Setup
+##@ Setup/Commands
 setup: create-dirs ## - Initial setup - create directories and copy env file
 	@echo "$(GREEN)[INFO]$(NC) Setting up ${PROJECT_NAME} database environment..."
 	@if [ ! -f "$(ENV_FILE)" ]; then \
@@ -56,7 +60,7 @@ create-dirs: ## - Create necessary directories
 	@mkdir -p $(DATA_DIR)/rabbitmq
 	@echo "$(GREEN)[INFO]$(NC) Directories created successfully!"
 
-##@ Docker Services
+##@ Docker/Commands
 ps: ## - Show running containers
 	@echo "$(GREEN)[INFO]$(NC) Running containers:"
 	@docker ps --filter "name=$(PROJECT_NAME)"
@@ -119,7 +123,7 @@ shell-rabbitmq: check-env ## - Connect to RabbitMQ management CLI
 	@echo "$(GREEN)[INFO]$(NC) Connecting to RabbitMQ management CLI..."
 	@docker exec -it $(PROJECT_NAME)-rabbitmq-1 rabbitmqctl status
 
-##@ Monitoring
+##@ Monitoring/Commands
 info: check-env ## - Show connection information
 	@echo "$(GREEN)[INFO]$(NC) Connection Information:"
 	@echo "PostgreSQL: postgresql://$(POSTGRES_USER):your_password@localhost:$(POSTGRES_PORT)/$(POSTGRES_DB)"
@@ -186,15 +190,22 @@ rabbitmq-info: check-env ## - Show RabbitMQ status and queues
 	@echo ""
 	@echo "$(YELLOW)=== RabbitMQ Users ===$(NC)"
 	@docker exec $(PROJECT_NAME)-rabbitmq-1 rabbitmqctl list_users || echo "$(RED)✗$(NC) Could not list users"
-##@ Security Commands
-secure-env: ## - Set secure permissions on .env file
+##@ Security/Commands
+security: ## - Run comprehensive security audit
+	@echo "$(GREEN)[INFO]$(NC) Running security check..."
 	@echo "$(GREEN)[INFO]$(NC) Setting secure permissions on .env file..."
 	@chmod 600 .env
 	@echo "$(GREEN)✓$(NC) .env file permissions set to 600"
-
-security-check: ## - Run comprehensive security audit
-	@echo "$(GREEN)[INFO]$(NC) Running security check..."
-	@./bin/security-check.sh
+	@./bin/checker.sh
+gen-pass: ## - Generate strong passwords for services
+	@echo "$(GREEN)[INFO]$(NC) Generating strong passwords..."
+	@echo "Copy these to your .env file:"
+	@echo ""
+	@echo "POSTGRES_PASS=$$(openssl rand -base64 32 | tr -d '=' | head -c 24)"
+	@echo "REDIS_PASS=$$(openssl rand -base64 32 | tr -d '=' | head -c 24)"
+	@echo "RABBITMQ_PASS=$$(openssl rand -base64 32 | tr -d '=' | head -c 24)"
+	@echo ""
+	@echo "$(YELLOW)Note: Save these passwords securely!$(NC)"
 
 audit-logs: ## - Show recent security-relevant log entries
 	@echo "$(GREEN)[INFO]$(NC) Showing recent security logs..."
@@ -207,12 +218,139 @@ audit-logs: ## - Show recent security-relevant log entries
 	@echo "$(YELLOW)RabbitMQ Authentication:$(NC)"
 	@docker logs $(PROJECT_NAME)-rabbitmq-1 2>&1 | grep -E "(authentication|login|failed)" | tail -10 || echo "No recent auth events"
 
-generate-passwords: ## - Generate strong passwords for services
-	@echo "$(GREEN)[INFO]$(NC) Generating strong passwords..."
-	@echo "Copy these to your .env file:"
+##@ Ufw/Commands
+ufw-check: ## - Check if UFW is installed
+	@if ! command -v ufw >/dev/null 2>&1; then \
+		echo "$(RED)[ERROR]$(NC) UFW is not installed!"; \
+		echo "$(YELLOW)[INFO]$(NC) CentOS/RHEL: sudo yum install ufw"; \
+		echo "$(YELLOW)[INFO]$(NC) Ubuntu/Debian: sudo apt install ufw"; \
+		exit 1; \
+	fi
+
+ufw-status: ufw-check ## - Show UFW status and database ports
+	@echo "$(GREEN)[INFO]$(NC) UFW Status:"
+	@sudo ufw status verbose
 	@echo ""
-	@echo "POSTGRES_PASS=$$(openssl rand -base64 32 | tr -d '=' | head -c 24)"
-	@echo "REDIS_PASS=$$(openssl rand -base64 32 | tr -d '=' | head -c 24)"
-	@echo "RABBITMQ_PASS=$$(openssl rand -base64 32 | tr -d '=' | head -c 24)"
+	@echo "$(GREEN)[INFO]$(NC) Database Ports Configuration:"
+	@echo "  Redis: $(REDIS_PORT)"
+	@echo "  RabbitMQ: $(RABBITMQ_PORT)"
+	@echo "  RabbitMQ Management: $(RABBITMQ_MANAGEMENT_PORT)"
+	@echo "  PostgreSQL: $(POSTGRES_PORT)"
+
+ufw-enable: ufw-check ## - Enable UFW with secure defaults
+	@echo "$(GREEN)[INFO]$(NC) Enabling UFW with secure defaults..."
+	@sudo ufw --force default deny incoming
+	@sudo ufw --force default allow outgoing
+	@sudo ufw allow $(SSH_PORT)
+	@sudo ufw --force enable
+	@echo "$(GREEN)✓$(NC) UFW enabled with default deny policy"
+	@echo "$(YELLOW)[INFO]$(NC) SSH access is allowed to prevent lockout"
+
+ufw-disable: ufw-check ## - Disable UFW
+	@echo "$(GREEN)[INFO]$(NC) Disabling UFW..."
+	@sudo ufw --force disable
+	@echo "$(GREEN)✓$(NC) UFW disabled"
+
+ufw-allow: ufw-check ## - Allow <IP> to specific <PORT> (must be a project port)
+	@if [ -z "$(PORT)" ] || [ -z "$(IP)" ]; then \
+		echo "$(RED)[ERROR]$(NC) Port and IP required!"; \
+		echo "$(YELLOW)[INFO]$(NC) Usage: make ufw-allow PORT=5432 IP=203.0.113.45"; \
+		exit 1; \
+	fi
+	@if ! echo "$(SERVICE_PORTS)" | grep -wq "$(PORT)"; then \
+		echo "$(RED)[ERROR]$(NC) Port $(PORT) is not in project service ports: $(SERVICE_PORTS)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)[INFO]$(NC) Allowing IP $(IP) to access port $(PORT)..."
+	@sudo ufw allow from $(IP) to any port $(PORT) comment "$(PROJECT_NAME) port $(PORT) from $(IP)"
+	@echo "$(GREEN)✓$(NC) IP $(IP) can now access port $(PORT)"
+
+ufw-deny: ufw-check ## - Deny <IP> from specific <PORT> (must be a project port)
+	@if [ -z "$(PORT)" ] || [ -z "$(IP)" ]; then \
+		echo "$(RED)[ERROR]$(NC) Port and IP required!"; \
+		echo "$(YELLOW)[INFO]$(NC) Usage: make ufw-deny PORT=5432 IP=203.0.113.45"; \
+		exit 1; \
+	fi
+	@if ! echo "$(SERVICE_PORTS)" | grep -wq "$(PORT)"; then \
+		echo "$(RED)[ERROR]$(NC) Port $(PORT) is not in project service ports: $(SERVICE_PORTS)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)[INFO]$(NC) Denying IP $(IP) from port $(PORT)..."
+	@sudo ufw delete allow from $(IP) to any port $(PORT) 2>/dev/null || true
+	@echo "$(GREEN)✓$(NC) IP $(IP) is now blocked from port $(PORT)"
+
+ufw-deny-ip: ufw-check ## - Deny <IP> from all service ports
+	@if [ -z "$(IP)" ]; then \
+		echo "$(RED)[ERROR]$(NC) IP address required!"; \
+		echo "$(YELLOW)[INFO]$(NC) Usage: make ufw-deny-ip IP=203.0.113.45"; \
+		exit 1; \
+	fi
+	@for port in $(SERVICE_PORTS); do \
+		echo "$(GREEN)[INFO]$(NC) Denying IP $(IP) from port $$port..."; \
+		sudo ufw delete allow from $(IP) to any port $$port 2>/dev/null || true; \
+	done
+	@echo "$(GREEN)✓$(NC) IP $(IP) is now blocked from all service ports"
+
+ufw-allow-ip: ufw-check ## - Allow <IP> to all service ports
+	@if [ -z "$(IP)" ]; then \
+		echo "$(RED)[ERROR]$(NC) IP address required!"; \
+		echo "$(YELLOW)[INFO]$(NC) Usage: make ufw-allow-ip IP=203.0.113.45"; \
+		exit 1; \
+	fi
+	@for port in $(SERVICE_PORTS); do \
+		echo "$(GREEN)[INFO]$(NC) Allowing IP $(IP) to access port $$port..."; \
+		sudo ufw allow from $(IP) to any port $$port comment "Service port $$port from $(IP)"; \
+	done
+	@echo "$(GREEN)✓$(NC) IP $(IP) can now access all service ports"
+
+ufw-reset: ufw-check ## - Reset all UFW rules (⚠️ removes all rules)
+	@echo "$(RED)[WARNING]$(NC) This will remove all UFW rules!"
+	@echo "$(RED)[WARNING]$(NC) Press Ctrl+C to cancel, or Enter to continue..."
+	@read dummy
+	@echo "$(GREEN)[INFO]$(NC) Resetting UFW rules..."
+	@sudo ufw --force reset
+	@echo "$(GREEN)✓$(NC) UFW rules reset"
+
+ufw-backup: ufw-check ## - Backup current UFW rules
+	@mkdir -p ./stores/ufw
+	@BACKUP_FILE="./stores/ufw/ufw-backup-$$(date +%Y%m%d-%H%M%S).txt"; \
+	echo "$(GREEN)[INFO]$(NC) Backing up UFW rules to $$BACKUP_FILE..."; \
+	sudo ufw status numbered > $$BACKUP_FILE; \
+	echo "$(GREEN)✓$(NC) UFW rules backed up to $$BACKUP_FILE"; \
+	echo "$(YELLOW)[INFO]$(NC) Use 'make ufw-list-backups' to see all backups"
+
+ufw-restore: ufw-check ## - Restore UFW rules from backup
+	@if [ -z "$(FILE)" ]; then \
+		echo "$(RED)[ERROR]$(NC) Backup file required!"; \
+		echo "$(YELLOW)[INFO]$(NC) Usage: make ufw-restore FILE=ufw-backup-20250819-123456.txt"; \
+		echo "$(YELLOW)[INFO]$(NC) Use 'make ufw-list-backups' to see available backups"; \
+		exit 1; \
+	fi
+	@if [ ! -f "./stores/ufw/$(FILE)" ]; then \
+		echo "$(RED)[ERROR]$(NC) Backup file './stores/ufw/$(FILE)' not found!"; \
+		echo "$(YELLOW)[INFO]$(NC) Use 'make ufw-list-backups' to see available backups"; \
+		exit 1; \
+	fi
+	@echo "$(BLUE)[INFO]$(NC) Backup file contents:"
+	@cat "./stores/ufw/$(FILE)"
 	@echo ""
-	@echo "$(YELLOW)Note: Save these passwords securely!$(NC)"
+	@echo "$(YELLOW)[INFO]$(NC) To restore, manually add rules using the backup as reference"
+	@echo "$(YELLOW)[INFO]$(NC) Example: sudo ufw allow from 192.168.1.100 to any port 5432"
+
+ufw-list-backups: ## - List all UFW backup files
+	@echo "$(GREEN)[INFO]$(NC) Available UFW backup files:"
+	@if [ -d "./stores/ufw" ] && [ "$$(ls -A ./stores/ufw 2>/dev/null)" ]; then \
+		ls -la ./stores/ufw/; \
+	else \
+		echo "$(YELLOW)[INFO]$(NC) No backup files found. Use 'make ufw-backup' to create one."; \
+	fi
+
+ufw-clean-backups: ## - Clean old UFW backup files (keeps last 5)
+	@echo "$(GREEN)[INFO]$(NC) Cleaning old UFW backup files (keeping last 5)..."
+	@if [ -d "./stores/ufw" ]; then \
+		cd ./stores/ufw && ls -t ufw-backup-*.txt 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true; \
+		echo "$(GREEN)✓$(NC) Old backup files cleaned (kept last 5)"; \
+		echo "$(YELLOW)[INFO]$(NC) Use 'make ufw-list-backups' to see remaining backups"; \
+	else \
+		echo "$(YELLOW)[INFO]$(NC) No backup directory found"; \
+	fi

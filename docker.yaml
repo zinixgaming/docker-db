@@ -12,7 +12,7 @@ services:
       --appendonly yes
       --appendfsync everysec
     ports:
-      - "${BIND_IP:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
       - ./conf/redis.conf:/usr/local/etc/redis/redis.conf:ro
@@ -47,7 +47,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASS}
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
     ports:
-      - "${BIND_IP:-127.0.0.1}:${POSTGRES_PORT}:5432"
+      - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Link default sql
@@ -85,8 +85,8 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
     ports:
-      - "${BIND_IP:-127.0.0.1}:${RABBITMQ_PORT:-5672}:5672"
-      - "${BIND_IP:-127.0.0.1}:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     deploy:

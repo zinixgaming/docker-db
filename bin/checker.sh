@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Security Check Script for Docker Database Stack
+# Security Check Script
 # Usage: ./bin/security-check.sh
 
 set -e
