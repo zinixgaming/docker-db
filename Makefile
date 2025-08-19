@@ -16,16 +16,16 @@ ENV_FILE := .env
 DATA_DIR := ./data
 PROJECT_NAME := zinixgames
 DOCKER_COMPOSE_FILE := ./docker.yaml
-# Service Ports
-SSH_PORT := 22
-SERVICE_PORTS := $(POSTGRES_PORT) $(REDIS_PORT) $(RABBITMQ_PORT) $(RABBITMQ_MANAGEMENT_PORT)
-
 
 # Load environment variables from .env if it exists
 ifneq (,$(wildcard $(ENV_FILE)))
     include $(ENV_FILE)
     export
 endif
+
+# Service Ports (defined after .env is loaded)
+SSH_PORT := 22
+SERVICE_PORTS := $(POSTGRES_PORT) $(REDIS_PORT) $(RABBITMQ_PORT) $(RABBITMQ_MANAGEMENT_PORT)
 
 ##@ Help
 help: ## - Show help message
@@ -302,6 +302,45 @@ ufw-allow-ip: ufw-check ## - Allow <IP> to all service ports
 		sudo ufw allow from $(IP) to any port $$port comment "Service port $$port from $(IP)"; \
 	done
 	@echo "$(GREEN)✓$(NC) IP $(IP) can now access all service ports"
+
+ufw-test-ip: ufw-check ## - Test if <IP> can connect to service ports.
+	@if [ -z "$(IP)" ]; then \
+		echo "$(RED)[ERROR]$(NC) IP address required!"; \
+		echo "$(YELLOW)[INFO]$(NC) Usage: make ufw-test-ip IP=203.0.113.45"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)[INFO]$(NC) Testing connection access for IP: $(IP)"
+	@echo "$(BLUE)[INFO]$(NC) Checking UFW rules for service ports..."
+	@echo ""
+	@echo "$(YELLOW)=== PostgreSQL Port $(POSTGRES_PORT) ===$(NC)"
+	@if sudo ufw status | grep -q "$(POSTGRES_PORT)/tcp.*ALLOW.*$(IP)" || sudo ufw status | grep -q "$(POSTGRES_PORT)/tcp.*ALLOW.*Anywhere"; then \
+		echo "$(GREEN)✓$(NC) IP $(IP) can connect to PostgreSQL"; \
+	else \
+		echo "$(RED)✗$(NC) IP $(IP) cannot connect to PostgreSQL"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)=== Redis Port $(REDIS_PORT) ===$(NC)"
+	@if sudo ufw status | grep -q "$(REDIS_PORT)/tcp.*ALLOW.*$(IP)" || sudo ufw status | grep -q "$(REDIS_PORT)/tcp.*ALLOW.*Anywhere"; then \
+		echo "$(GREEN)✓$(NC) IP $(IP) can connect to Redis"; \
+	else \
+		echo "$(RED)✗$(NC) IP $(IP) cannot connect to Redis"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)=== RabbitMQ Port $(RABBITMQ_PORT) ===$(NC)"
+	@if sudo ufw status | grep -q "$(RABBITMQ_PORT)/tcp.*ALLOW.*$(IP)" || sudo ufw status | grep -q "$(RABBITMQ_PORT)/tcp.*ALLOW.*Anywhere"; then \
+		echo "$(GREEN)✓$(NC) IP $(IP) can connect to RabbitMQ"; \
+	else \
+		echo "$(RED)✗$(NC) IP $(IP) cannot connect to RabbitMQ"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)=== RabbitMQ Management Port $(RABBITMQ_MANAGEMENT_PORT) ===$(NC)"
+	@if sudo ufw status | grep -q "$(RABBITMQ_MANAGEMENT_PORT)/tcp.*ALLOW.*$(IP)" || sudo ufw status | grep -q "$(RABBITMQ_MANAGEMENT_PORT)/tcp.*ALLOW.*Anywhere"; then \
+		echo "$(GREEN)✓$(NC) IP $(IP) can connect to RabbitMQ Management"; \
+	else \
+		echo "$(RED)✗$(NC) IP $(IP) cannot connect to RabbitMQ Management"; \
+	fi
+	@echo ""
+	@echo "$(BLUE)[INFO]$(NC) Connection test completed for IP: $(IP)"
 
 ufw-reset: ufw-check ## - Reset all UFW rules (⚠️ removes all rules)
 	@echo "$(RED)[WARNING]$(NC) This will remove all UFW rules!"
