@@ -347,7 +347,7 @@ ufw-test-ip: ufw-check
 	@for port in $(SERVICE_PORTS); do \
 		echo ""; \
 		echo "$(YELLOW)=== Testing Port $$port ===$(NC)"; \
-		if sudo ufw status | grep -E "$$port/tcp.*ALLOW" | grep -Eq "$(IP)|Anywhere"; then \
+		if sudo ufw status | grep -E "^($$port|$$port/tcp).*ALLOW" | grep -q "$(IP)"; then \
 			echo "$(GREEN)✓$(NC) UFW allows $(IP) on port $$port"; \
 		else \
 			echo "$(RED)✗$(NC) UFW blocks $(IP) on port $$port"; \
