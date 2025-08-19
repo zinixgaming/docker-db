@@ -186,3 +186,33 @@ rabbitmq-info: check-env ## - Show RabbitMQ status and queues
 	@echo ""
 	@echo "$(YELLOW)=== RabbitMQ Users ===$(NC)"
 	@docker exec $(PROJECT_NAME)-rabbitmq-1 rabbitmqctl list_users || echo "$(RED)✗$(NC) Could not list users"
+##@ Security Commands
+secure-env: ## - Set secure permissions on .env file
+	@echo "$(GREEN)[INFO]$(NC) Setting secure permissions on .env file..."
+	@chmod 600 .env
+	@echo "$(GREEN)✓$(NC) .env file permissions set to 600"
+
+security-check: ## - Run comprehensive security audit
+	@echo "$(GREEN)[INFO]$(NC) Running security check..."
+	@./bin/security-check.sh
+
+audit-logs: ## - Show recent security-relevant log entries
+	@echo "$(GREEN)[INFO]$(NC) Showing recent security logs..."
+	@echo "$(YELLOW)PostgreSQL Connection Logs:$(NC)"
+	@docker logs $(PROJECT_NAME)-postgres-1 2>&1 | grep -E "(connection|authentication|FATAL|ERROR)" | tail -10 || echo "No recent connection logs"
+	@echo ""
+	@echo "$(YELLOW)Redis Security Events:$(NC)"
+	@docker logs $(PROJECT_NAME)-redis-1 2>&1 | grep -E "(DENIED|AUTH|ERROR)" | tail -10 || echo "No recent security events"
+	@echo ""
+	@echo "$(YELLOW)RabbitMQ Authentication:$(NC)"
+	@docker logs $(PROJECT_NAME)-rabbitmq-1 2>&1 | grep -E "(authentication|login|failed)" | tail -10 || echo "No recent auth events"
+
+generate-passwords: ## - Generate strong passwords for services
+	@echo "$(GREEN)[INFO]$(NC) Generating strong passwords..."
+	@echo "Copy these to your .env file:"
+	@echo ""
+	@echo "POSTGRES_PASS=$$(openssl rand -base64 32 | tr -d '=' | head -c 24)"
+	@echo "REDIS_PASS=$$(openssl rand -base64 32 | tr -d '=' | head -c 24)"
+	@echo "RABBITMQ_PASS=$$(openssl rand -base64 32 | tr -d '=' | head -c 24)"
+	@echo ""
+	@echo "$(YELLOW)Note: Save these passwords securely!$(NC)"
