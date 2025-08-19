@@ -241,8 +241,8 @@ ufw-enable: ufw-check ## - Enable UFW with secure defaults
 	@echo "$(GREEN)[INFO]$(NC) Enabling UFW with secure defaults..."
 	@sudo ufw --force default deny incoming
 	@sudo ufw --force default allow outgoing
-	@sudo ufw allow $(SSH_PORT)
 	@sudo ufw --force enable
+	@sudo ufw allow $(SSH_PORT)
 	@echo "$(GREEN)✓$(NC) UFW enabled with default deny policy"
 	@echo "$(YELLOW)[INFO]$(NC) SSH access is allowed to prevent lockout"
 
