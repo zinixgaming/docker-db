@@ -137,9 +137,9 @@ stats: ## - Live resource monitoring (Ctrl+C to exit)
 
 health: ## - Check service health
 	@echo "$(GREEN)[INFO]$(NC) Checking service health..."
-	@docker exec $(PROJECT_NAME)-postgres-1 pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB) && echo "$(GREEN)✓$(NC) PostgreSQL is healthy" || echo "$(RED)✗$(NC) PostgreSQL is unhealthy"
-	@docker exec -e REDIS_PASSWORD=$(REDIS_PASS) $(PROJECT_NAME)-redis-1 redis-cli -a $(REDIS_PASS) ping && echo "$(GREEN)✓$(NC) Redis is healthy" || echo "$(RED)✗$(NC) Redis is unhealthy"
-	@docker exec $(PROJECT_NAME)-rabbitmq-1 rabbitmq-diagnostics ping && echo "$(GREEN)✓$(NC) RabbitMQ is healthy" || echo "$(RED)✗$(NC) RabbitMQ is unhealthy"
+	@docker exec $(PROJECT_NAME)-postgres-1 pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB) > /dev/null 2>&1 && echo "$(GREEN)✓$(NC) PostgreSQL is healthy" || echo "$(RED)✗$(NC) PostgreSQL is unhealthy"
+	@docker exec -e REDISCLI_AUTH=$(REDIS_PASS) $(PROJECT_NAME)-redis-1 redis-cli ping > /dev/null 2>&1 && echo "$(GREEN)✓$(NC) Redis is healthy" || echo "$(RED)✗$(NC) Redis is unhealthy"
+	@docker exec $(PROJECT_NAME)-rabbitmq-1 rabbitmq-diagnostics ping > /dev/null 2>&1 && echo "$(GREEN)✓$(NC) RabbitMQ is healthy" || echo "$(RED)✗$(NC) RabbitMQ is unhealthy"
 
 resources: ## - Show resource usage vs configured limits
 	@echo "$(GREEN)[INFO]$(NC) Resource Usage vs Configured Limits:"
